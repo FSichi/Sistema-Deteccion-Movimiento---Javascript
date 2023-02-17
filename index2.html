@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <link rel="stylesheet" type="text/css" href="./styles.css" />
+
+    <script async src="https://docs.opencv.org/master/opencv.js" onload="openCvReady();"
+        type="text/javascript"></script>
+
+    <title>Seguidor de Mov. By FS</title>
+</head>
+
+<body>
+
+    <h2>Seguidor de Movimiento a partir de JavaScript utilizando Open CV</h2>
+
+
+    <section class="contenedor">
+        <div>
+            <h1>Webcam del Usuario</h1>
+            <video id="video" width="640" height="480" playsinline class="video1"></video>
+        </div>
+
+        <div>
+            <h1>Seguimiento de Manos (Sustraccion de Fondo)</h1>
+            <canvas id="canvas" width="640" height="480" class="video2"></canvas>
+            <canvas id="backgroundCanvas" style="display: none;"></canvas>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <h3>Made by Facundo Sichi - © 2023</h3>
+    </footer>
+
+    <script type="text/javascript">
+
+        function openCvReady() {
+            cv['onRuntimeInitialized'] = () => {
+                onOpenCvReady();
+            };
+        }
+
+        function onOpenCvReady() {
+
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(function (stream) {
+                    video.srcObject = stream;
+                    video.play();
+                })
+                .catch(function (err) {
+                    console.log("An error occurred: " + err);
+                });
+
+            // Captura de imagen de fondo
+            const backgroundCanvas = document.getElementById("backgroundCanvas");
+            const backgroundCtx = backgroundCanvas.getContext("2d");
+
+            function processVideo() {
+
+                const video = document.getElementById("video");
+                const canvas = document.getElementById("canvas");
+                const ctx = canvas.getContext("2d");
+
+                // Dibujar el fotograma actual del video en el canvas
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                // Convertir la imagen del canvas a una matriz OpenCV
+                let src = cv.matFromImageData(ctx.getImageData(0, 0, canvas.width, canvas.height));
+
+                // Crear una matriz vacía para almacenar la imagen de fondo
+                let background = new cv.Mat();
+
+                // Crear una matriz vacía para almacenar la diferencia entre la imagen actual y la imagen de fondo
+                let difference = new cv.Mat();
+
+                // Contador para llevar el número de fotogramas procesados
+                let frameCount = 0;
+
+                // Función para actualizar la imagen de fondo cada cierto número de fotogramas
+                function updateBackground() {
+                    // Si el contador es cero, copiar la imagen actual como imagen de fondo
+                    if (frameCount == 0) {
+                        src.copyTo(background);
+                    }
+                    // Si el contador es mayor que cero, sustraer la imagen de fondo de la imagen actual para obtener la diferencia
+                    else {
+                        cv.absdiff(src, background, difference);
+                        difference.convertTo(difference, cv.CV_8UC1);
+                        cv.threshold(difference, difference, 50, 255, cv.THRESH_BINARY);
+                        cv.erode(difference, difference, cv.Mat.ones(3, 3, cv.CV_8U), new cv.Point(-1, -1), 1, cv.BORDER_CONSTANT, cv.morphologyDefaultBorderValue());
+                        cv.dilate(difference, difference, cv.Mat.ones(5, 5, cv.CV_8U), new cv.Point(-1, -1), 1, cv.BORDER_CONSTANT, cv.morphologyDefaultBorderValue());
+                        difference.copyTo(background);
+                    }
+
+                    // Incrementar el contador de fotogramas y llamar a la función para actualizar la imagen de fondo después de un cierto número de fotogramas
+                    frameCount++;
+                    if (frameCount >= 30) {
+                        frameCount = 0;
+                    }
+                    setTimeout(updateBackground, 50);
+                }
+
+                // Llamar a la función para actualizar la imagen de fondo
+                updateBackground();
+
+                // Función para procesar el fotograma actual y detectar la mano
+                function detectHand() {
+                    // Crear una matriz vacía para almacenar la imagen en escala de grises
+                    let gray = new cv.Mat();
+
+                    // Crear una matriz vacía para almacenar la imagen suavizada
+                    let blurred = new cv.Mat();
+
+                    // Crear una matriz vacía para almacenar la imagen umbralizada
+                    let thresholded = new cv.Mat();
+
+                    // Convertir la imagen actual a escala de grises
+                    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+
+                    // Suavizar la imagen para reducir el ruido
+                    cv.GaussianBlur(gray, blurred, new cv.Size(3, 3), 0, 0, cv.BORDER_DEFAULT);
+
+                    // Aplicar un umbral a la imagen para separar la mano del fondo
+                    cv.threshold(blurred, thresholded, 100, 255, cv.THRESH_BINARY + cv.THRESH_OTSU);
+
+                    // Encontrar los contornos en la imagen umbralizada
+                    let contours = new cv.MatVector();
+                    let hierarchy = new cv.Mat();
+                    cv.findContours(thresholded, contours, hierarchy, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE);
+
+                    // Encontrar el contorno con el área máxima (la mano)
+                    let maxArea = 0;
+                    let maxAreaIdx = -1;
+                    for (let i = 0; i < contours.size(); ++i) {
+                        let area = cv.contourArea(contours.get(i));
+                        if (area > maxArea) {
+                            maxArea = area;
+                            maxAreaIdx = i;
+                        }
+                    }
+
+                    /* let maxContourIndex = 0;
+                    for (let i = 0; i < contours.size(); i++) {
+                        let area = cv.contourArea(contours.get(i), false);
+                        if (area > maxArea) {
+                            maxArea = area;
+                            maxContourIndex = i;
+                        }
+                    }
+
+                    if (contours.size() > 0) {
+                        let moments = cv.moments(contours.get(maxContourIndex), false);
+                        let cx = moments.m10 / moments.m00;
+                        let cy = moments.m01 / moments.m00;
+                        console.log("X: " + cx + " Y: " + cy);
+
+                        if (contours.size() > 0) {
+                            let maxContour = contours.get(maxContourIndex);
+                            let boundingRect = cv.boundingRect(maxContour);
+                            ctx.beginPath();
+                            ctx.rect(boundingRect.x, boundingRect.y, boundingRect.width, boundingRect.height);
+                            ctx.lineWidth = 2;
+                            ctx.strokeStyle = "red";
+                            ctx.stroke();
+                        }
+                    } */
+
+                    // Dibujar el contorno de la mano en la imagen de salida
+                    let output = new cv.Mat.zeros(src.rows, src.cols, cv.CV_8UC3);
+                    if (maxAreaIdx != -1) {
+                        let color = new cv.Scalar(255, 0, 0);
+                        cv.drawContours(output, contours, maxAreaIdx, color, 3, cv.LINE_8, hierarchy, 0);
+                    }
+
+                    // Liberar la memoria utilizada por las matrices
+                    gray.delete();
+                    blurred.delete();
+                    thresholded.delete();
+                    contours.delete();
+                    hierarchy.delete();
+
+                    // Devolver la imagen de salida
+                    return output;
+                }
+
+                // Función para mostrar el fotograma procesado en el canvas
+                function showProcessedFrame() {
+                    // Procesar el fotograma actual y obtener la imagen de salida
+                    let output = detectHand();
+
+                    // Dibujar la imagen de salida en el canvas
+                    let canvas = document.getElementById("canvas");
+                    let ctx = canvas.getContext("2d");
+                    cv.imshow("canvas", output);
+
+                    // Liberar la memoria utilizada por la matriz de salida
+                    output.delete();
+
+                    // Llamar a la función de nuevo después de un cierto número de milisegundos
+                    setTimeout(showProcessedFrame, 1000 / 30);
+                }
+
+                // Llamar a la función para mostrar el fotograma procesado en el canvas
+                showProcessedFrame()
+
+                requestAnimationFrame(processVideo);
+            }
+
+            requestAnimationFrame(processVideo);
+        }
+    </script>
+
+</body>
+
+</html>

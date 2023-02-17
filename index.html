@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <link rel="stylesheet" type="text/css" href="./styles.css" />
+
+    <script async src="https://docs.opencv.org/master/opencv.js" onload="openCvReady();"
+        type="text/javascript"></script>
+
+    <title>Seguidor de Mov. By FS</title>
+</head>
+
+<body>
+
+    <h2>Seguidor de Movimiento a partir de JavaScript utilizando Open CV</h2>
+
+    <section class="contenedor">
+        <div>
+            <h1>Webcam del Usuario</h1>
+            <video id="video" width="640" height="480" playsinline class="video1"></video>
+        </div>
+
+        <div>
+            <h1>Seguimiento de Manos (Estandar)</h1>
+            <canvas id="canvas" width="640" height="480" class="video2"></canvas>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <h3>Made by Facundo Sichi - © 2023</h3>
+    </footer>
+
+    <script type="text/javascript">
+
+        function openCvReady() {
+            cv['onRuntimeInitialized'] = () => {
+                onOpenCvReady();
+            };
+        }
+
+        function onOpenCvReady() {
+
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(function (stream) {
+                    video.srcObject = stream;
+                    video.play();
+                })
+                .catch(function (err) {
+                    console.log("An error occurred: " + err);
+                });
+
+
+            function processVideo() {
+                const video = document.getElementById("video");
+                const canvas = document.getElementById("canvas");
+                const ctx = canvas.getContext("2d");
+
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                let src = cv.matFromImageData(ctx.getImageData(0, 0, canvas.width, canvas.height));
+                let dst = new cv.Mat();
+
+                cv.cvtColor(src, dst, cv.COLOR_RGBA2GRAY);
+                cv.GaussianBlur(dst, dst, new cv.Size(7, 7), 0);
+                cv.threshold(dst, dst, 100, 255, cv.THRESH_BINARY);
+
+                let contours = new cv.MatVector();
+                let hierarchy = new cv.Mat();
+                cv.findContours(dst, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+                let maxArea = 0;
+                let maxContourIndex = 0;
+                for (let i = 0; i < contours.size(); i++) {
+                    let area = cv.contourArea(contours.get(i), false);
+                    if (area > maxArea) {
+                        maxArea = area;
+                        maxContourIndex = i;
+                    }
+                }
+
+                if (contours.size() > 0) {
+                    let moments = cv.moments(contours.get(maxContourIndex), false);
+                    let cx = moments.m10 / moments.m00;
+                    let cy = moments.m01 / moments.m00;
+                    console.log("X: " + cx + " Y: " + cy);
+
+                    if (contours.size() > 0) {
+                        let maxContour = contours.get(maxContourIndex);
+                        let boundingRect = cv.boundingRect(maxContour);
+                        ctx.beginPath();
+                        ctx.rect(boundingRect.x, boundingRect.y, boundingRect.width, boundingRect.height);
+                        ctx.lineWidth = 2;
+                        ctx.strokeStyle = "red";
+                        ctx.stroke();
+                    }
+                }
+
+                src.delete();
+                dst.delete();
+                contours.delete();
+                hierarchy.delete();
+
+                requestAnimationFrame(processVideo);
+            }
+            requestAnimationFrame(processVideo);
+
+        }
+    </script>
+
+</body>
+
+</html>
