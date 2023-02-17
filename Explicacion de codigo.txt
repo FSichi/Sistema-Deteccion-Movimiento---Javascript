@@ -1,0 +1,21 @@
+Básicamente se define un elemento <video> para capturar el video de la cámara del dispositivo y dos elementos <canvas> para mostrar el video procesado y la imagen de fondo. El funcionamiento de este código lo conseguí desarrollando 3 funciones principales: 
+
+ 
+
+ProcessVideo() 
+
+UpdateBackground()
+
+DetectHands()
+
+ 
+
+La función processVideo se encarga de procesar el fotograma actual y detectar la mano en la imagen. Para ello, se crea una matriz vacía para almacenar la imagen de fondo, una matriz vacía para almacenar la diferencia entre la imagen actual y la imagen de fondo, y un contador para llevar el número de fotogramas procesados. 
+
+ 
+
+La función updateBackground se llama cada cierto número de fotogramas para actualizar la imagen de fondo.
+
+ 
+
+En la función detectHand, cree una matriz vacía para almacenar la imagen en escala de grises, una matriz vacía para almacenar la imagen suavizada, y una matriz vacía para almacenar la imagen umbralizada. La imagen umbralizada se utiliza para encontrar los contornos en la imagen y se encuentra el contorno con el área máxima, que se asume que es la mano.
